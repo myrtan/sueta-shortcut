@@ -2,75 +2,102 @@ import os
 import sys
 import ctypes
 import subprocess
-import tkinter as tk
 import webbrowser
 import winreg
 from datetime import datetime
-from tkinter import messagebox
-from typing import Callable, Iterable, Optional
+from typing import Callable, Optional
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont, QIcon, QKeySequence, QShortcut
+from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QGraphicsDropShadowEffect,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 APP_TITLE = "Sueta Shortcut"
-WINDOW_W = 980
-WINDOW_H = 640
 ICON_FILE = "sueta.ico"
 APP_ID = "sueta.shortcut.app"
-RADIUS = 18
+WINDOW_W = 1360
+WINDOW_H = 860
 
-BG = "#140b10"
-CARD = "#5a2432"
-PANEL = "#25141b"
-PANEL_BORDER = "#3c1c26"
-BUTTON = "#8b4254"
-FG = "#fff5f7"
-SUB = "#efccd4"
-STATUS = "#d9a8b6"
-
-ALT_ACCOUNTS_PATH = r"C:\Program Files (x86)\Steam\config\loginusers.vdf"
 WINDOWS_INSTALL_KEY = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion"
 WINDOWS_INSTALL_VALUE = "InstallDate"
+ALT_ACCOUNTS_PATH = r"C:\Program Files (x86)\Steam\config\loginusers.vdf"
+RECENT_PATH = os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Recent")
+PREFETCH_PATH = r"C:\Windows\Prefetch"
+AMCACHE_PATH = r"C:\Windows\AppCompat\Programs\Amcache.hve"
+LOGS_PATH = r"C:\Windows\System32\winevt\Logs"
 
 REG_PATHS = [
-    ("1", "Store", r"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store"),
-    ("2", "AppSwitched", r"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\AppSwitched"),
-    ("3", "ShowJumpView", r"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\ShowJumpView"),
-    ("4", "RunMRU", r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU"),
+    ("🧭 UserAssist", r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist"),
+    ("🗂 ShellBags", r"HKEY_CURRENT_USER\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU"),
+    ("📦 Store", r"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store"),
+    ("🪟 AppSwitched", r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\AppSwitched"),
+    ("📌 ShowJumpView", r"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\ShowJumpView"),
+    ("⚙ BAM", r"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\bam\State\UserSettings"),
+    ("⚙ DAM", r"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\dam\State\UserSettings"),
+    ("📝 MUICache", r"HKEY_CURRENT_USER\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache"),
+    ("🔎 TypedPaths", r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\TypedPaths"),
+    ("🔍 WordWheelQuery", r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\WordWheelQuery"),
+    ("📂 OpenSavePidlMRU", r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\OpenSavePidlMRU"),
+    ("📁 LastVisitedPidlMRU", r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\LastVisitedPidlMRU"),
+    ("🕘 RecentDocs", r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs"),
+    ("🧱 AppCompatCache", r"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\AppCompatCache"),
+    ("⌨ RunMRU", r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU"),
+]
+
+LOG_FILES = [
+    ("🔐 Security", os.path.join(LOGS_PATH, "Security.evtx")),
+    ("🖥 System", os.path.join(LOGS_PATH, "System.evtx")),
+    ("🛡 Defender", os.path.join(LOGS_PATH, "Microsoft-Windows-Windows Defender%4Operational.evtx")),
+    ("⌨ PowerShell", os.path.join(LOGS_PATH, "Microsoft-Windows-PowerShell%4Operational.evtx")),
 ]
 
 CHECK_LINKS = [
-    ("LastActivityView", "https://www.nirsoft.net/utils/lastactivityview.zip"),
-    ("USBDeview", "https://www.nirsoft.net/utils/usbdeview-x64.zip"),
-    ("System Informer", "https://disk.yandex.ru/d/TO1Epwdy9Padqw"),
-    ("Recuva", "https://download.ccleaner.com/rcsetup154.exe"),
-    ("Everything", "https://www.voidtools.com/Everything-1.4.1.1032.x64.zip"),
+    ("🕵 LastActivityView", "https://www.nirsoft.net/utils/lastactivityview.zip"),
+    ("🔌 USBDeview", "https://www.nirsoft.net/utils/usbdeview-x64.zip"),
+    ("📊 System Informer", "https://disk.yandex.ru/d/TO1Epwdy9Padqw"),
+    ("♻ Recuva", "https://download.ccleaner.com/rcsetup154.exe"),
+    ("🔎 Everything", "https://www.voidtools.com/Everything-1.4.1.1032.x64.zip"),
+    ("🧰 detect.ac/tools", "https://detect.ac/tools"),
+]
+
+QUICK_ACTIONS = [
+    ("🕘 Recent", "Недавние файлы и ярлыки", lambda: open_folder(RECENT_PATH)),
+    ("🧪 Temp", "Временные файлы пользователя", lambda: open_folder(os.environ.get("TEMP", ""))),
+    ("⚡ Prefetch", "Системный кэш запуска", lambda: open_folder(PREFETCH_PATH)),
+    ("🧩 Regedit", "Редактор реестра Windows", lambda: open_program(["regedit.exe"], "Не удалось открыть regedit.", "Открыт regedit")),
+    ("🛡 Защита", "Окно безопасности Windows", lambda: open_first_available("windowsdefender://threat", "windowsdefender:", "ms-settings:windowsdefender")),
+    ("🔒 Изоляция ядра", "Параметры безопасности устройства", lambda: open_first_available("windowsdefender://coreisolation", "ms-settings:windowsdefender", "windowsdefender:")),
+    ("🌐 Сеть", "Параметры сети и расхода данных", lambda: open_first_available("ms-settings:datausage", "ms-settings:network")),
+    ("🗑 Корзина", "Недавно удаленные файлы", lambda: open_program(["explorer.exe", "shell:RecycleBinFolder"], "Не удалось открыть корзину.", "Открыта корзина")),
+    ("🖥 Дата Windows", "Дата установки системы", lambda: show_windows_install_date()),
+    ("📦 Amcache.hve", "Показать файл базы Amcache", lambda: reveal_file(AMCACHE_PATH, "Amcache.hve")),
 ]
 
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-WM_SETICON = 0x0080
-ICON_SMALL = 0
-ICON_BIG = 1
-IMAGE_ICON = 1
-LR_LOADFROMFILE = 0x00000010
-
-root: Optional[tk.Tk] = None
-status_var: Optional[tk.StringVar] = None
+main_window: Optional["MainWindow"] = None
 
 
 def set_status(text: str) -> None:
-    if status_var is not None:
-        status_var.set(text)
+    if main_window is not None:
+        main_window.set_status(text)
 
 
 def resource_path(filename: str) -> str:
     base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_dir, filename)
-
-
-def show_error(text: str) -> None:
-    messagebox.showerror(APP_TITLE, text)
-
-
-def show_info(text: str) -> None:
-    messagebox.showinfo(APP_TITLE, text)
 
 
 def set_app_id() -> None:
@@ -80,67 +107,40 @@ def set_app_id() -> None:
         pass
 
 
-def _send_native_icons(window: tk.Tk, icon_path: str) -> None:
+def is_admin() -> bool:
     try:
-        hwnd = window.winfo_id()
-        big_icon = ctypes.windll.user32.LoadImageW(0, icon_path, IMAGE_ICON, 256, 256, LR_LOADFROMFILE)
-        small_icon = ctypes.windll.user32.LoadImageW(0, icon_path, IMAGE_ICON, 32, 32, LR_LOADFROMFILE)
-        if big_icon:
-            ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, big_icon)
-        if small_icon:
-            ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, small_icon)
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except Exception:
-        pass
+        return False
 
 
-def apply_icon(window: tk.Tk) -> None:
-    icon_path = resource_path(ICON_FILE)
-    if not os.path.exists(icon_path):
+def ensure_admin() -> None:
+    if is_admin():
         return
 
-    def _apply_once() -> None:
-        try:
-            window.iconbitmap(default=icon_path)
-        except Exception:
-            try:
-                window.wm_iconbitmap(icon_path)
-            except Exception:
-                pass
-        _send_native_icons(window, icon_path)
-
     try:
-        window.update_idletasks()
-    except Exception:
-        pass
+        if getattr(sys, "frozen", False):
+            executable = sys.executable
+            params = " ".join(f'"{arg}"' for arg in sys.argv[1:])
+        else:
+            executable = sys.executable
+            script_path = os.path.abspath(sys.argv[0])
+            params = " ".join([f'"{script_path}"', *[f'"{arg}"' for arg in sys.argv[1:]]])
 
-    _apply_once()
-    for delay in (50, 250, 800, 1500):
-        window.after(delay, _apply_once)
+        result = ctypes.windll.shell32.ShellExecuteW(None, "runas", executable, params, None, 1)
+        if result <= 32:
+            raise OSError(f"ShellExecuteW returned {result}")
+    except Exception as error:
+        ctypes.windll.user32.MessageBoxW(None, f"Не удалось запросить права администратора.\n\n{error}", APP_TITLE, 0x10)
+    raise SystemExit(0)
 
 
-def rounded_points(x1: int, y1: int, x2: int, y2: int, r: int):
-    return [
-        x1 + r, y1,
-        x1 + r, y1,
-        x2 - r, y1,
-        x2 - r, y1,
-        x2, y1,
-        x2, y1 + r,
-        x2, y1 + r,
-        x2, y2 - r,
-        x2, y2 - r,
-        x2, y2,
-        x2 - r, y2,
-        x2 - r, y2,
-        x1 + r, y2,
-        x1 + r, y2,
-        x1, y2,
-        x1, y2 - r,
-        x1, y2 - r,
-        x1, y1 + r,
-        x1, y1 + r,
-        x1, y1,
-    ]
+def show_error(text: str) -> None:
+    QMessageBox.critical(main_window, APP_TITLE, text)
+
+
+def show_info(text: str) -> None:
+    QMessageBox.information(main_window, APP_TITLE, text)
 
 
 def silent_popen(args: list[str]) -> None:
@@ -153,15 +153,27 @@ def silent_popen(args: list[str]) -> None:
     )
 
 
-def run_hidden(args: list[str]) -> None:
-    subprocess.run(
+def run_hidden(args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         args,
         check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
         creationflags=CREATE_NO_WINDOW,
         shell=False,
     )
+
+
+def open_program(args: list[str], error_text: str, success_text: Optional[str] = None) -> None:
+    try:
+        silent_popen(args)
+        if success_text:
+            set_status(success_text)
+    except Exception as error:
+        show_error(f"{error_text}\n\n{error}")
 
 
 def start_target(target: str) -> bool:
@@ -170,13 +182,6 @@ def start_target(target: str) -> bool:
         return True
     except Exception:
         return False
-
-
-def open_program(args: list[str], error_text: str) -> None:
-    try:
-        silent_popen(args)
-    except Exception as error:
-        show_error(f"{error_text}\n\n{error}")
 
 
 def open_folder(path: str) -> None:
@@ -193,11 +198,34 @@ def open_folder(path: str) -> None:
         show_error(f"Не удалось открыть:\n{path}\n\n{error}")
 
 
+def open_file(path: str, label: str) -> None:
+    if not os.path.exists(path):
+        show_error(f"Файл не найден:\n{path}")
+        return
+    try:
+        os.startfile(path)
+        set_status(f"Открыт файл: {label}")
+    except Exception as error:
+        show_error(f"Не удалось открыть файл:\n{path}\n\n{error}")
+
+
+def reveal_file(path: str, label: str) -> None:
+    if not os.path.exists(path):
+        show_error(f"Файл не найден:\n{path}")
+        return
+    open_program(
+        ["explorer.exe", f"/select,{path}"],
+        f"Не удалось показать файл:\n{path}",
+        f"Показан файл: {label}",
+    )
+
+
 def open_uri(uri: str) -> None:
     if start_target(uri):
         return
     try:
         webbrowser.open(uri, new=2)
+        set_status(f"Открыто: {uri}")
     except Exception as error:
         show_error(f"Не удалось открыть:\n{uri}\n\n{error}")
 
@@ -205,6 +233,7 @@ def open_uri(uri: str) -> None:
 def open_first_available(*targets: str) -> None:
     for target in targets:
         if start_target(target):
+            set_status(f"Открыто: {target}")
             return
     open_uri(targets[-1])
 
@@ -232,11 +261,15 @@ def open_regedit_path(reg_path: str, label: str) -> None:
     try:
         run_hidden(
             [
-                "reg", "add",
+                "reg",
+                "add",
                 r"HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Applets\Regedit",
-                "/v", "LastKey",
-                "/t", "REG_SZ",
-                "/d", reg_path,
+                "/v",
+                "LastKey",
+                "/t",
+                "REG_SZ",
+                "/d",
+                reg_path,
                 "/f",
             ]
         )
@@ -257,215 +290,303 @@ def show_windows_install_date() -> None:
         show_error(f"Не удалось получить дату установки Windows.\n\n{error}")
 
 
-class RoundedPanel(tk.Canvas):
-    def __init__(self, parent, bg_color: str, border_color: Optional[str] = None, radius: int = RADIUS, **kwargs):
-        super().__init__(parent, bg=BG, highlightthickness=0, bd=0, **kwargs)
-        self.bg_color = bg_color
-        self.border_color = border_color
-        self.radius = radius
-        self.bind("<Configure>", self._redraw)
+def open_event_log(path: str, label: str) -> None:
+    open_file(path, label)
 
-    def _redraw(self, _event=None) -> None:
-        self.delete("panel")
-        width = max(2, self.winfo_width())
-        height = max(2, self.winfo_height())
 
-        if self.border_color:
-            self.create_polygon(
-                rounded_points(1, 1, width - 1, height - 1, self.radius),
-                smooth=True,
-                fill=self.border_color,
-                outline="",
-                tags="panel",
-            )
-            inset = 2
+def apply_shadow(widget: QWidget, color: str = "#000000", blur: int = 36, offset_y: int = 10) -> None:
+    shadow = QGraphicsDropShadowEffect(widget)
+    shadow.setBlurRadius(blur)
+    shadow.setOffset(0, offset_y)
+    shadow.setColor(QColor(color))
+    widget.setGraphicsEffect(shadow)
+
+
+class GlassCardButton(QPushButton):
+    def __init__(self, title: str, subtitle: str, callback: Callable[[], None]):
+        super().__init__()
+        self.setCursor(Qt.PointingHandCursor)
+        self.setCheckable(False)
+        self.setFlat(True)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setMinimumHeight(118)
+        self.clicked.connect(callback)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(8)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("CardTitle")
+        subtitle_label = QLabel(subtitle)
+        subtitle_label.setObjectName("CardSubtitle")
+        subtitle_label.setWordWrap(True)
+
+        layout.addWidget(title_label)
+        layout.addWidget(subtitle_label)
+        layout.addStretch(1)
+
+        self.setProperty("role", "card")
+        apply_shadow(self, color="#00000088", blur=44, offset_y=14)
+
+
+class PillButton(QPushButton):
+    def __init__(self, text: str, callback: Callable[[], None], accent: bool = False):
+        super().__init__(text)
+        self.setCursor(Qt.PointingHandCursor)
+        self.clicked.connect(callback)
+        self.setMinimumHeight(54)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setProperty("accent", accent)
+
+
+class SectionFrame(QFrame):
+    def __init__(self, title: str, columns: int):
+        super().__init__()
+        self.columns = columns
+        self.setObjectName("SectionFrame")
+        apply_shadow(self, color="#00000066", blur=32, offset_y=8)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(22, 20, 22, 22)
+        outer.setSpacing(18)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("SectionTitle")
+        outer.addWidget(title_label)
+
+        self.grid = QGridLayout()
+        self.grid.setHorizontalSpacing(14)
+        self.grid.setVerticalSpacing(14)
+        outer.addLayout(self.grid)
+
+    def add_buttons(self, buttons: list[QPushButton]) -> None:
+        for index, button in enumerate(buttons):
+            row = index // self.columns
+            column = index % self.columns
+            self.grid.addWidget(button, row, column)
+        for column in range(self.columns):
+            self.grid.setColumnStretch(column, 1)
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle(APP_TITLE)
+        self.resize(WINDOW_W, WINDOW_H)
+        self.setMinimumSize(1180, 760)
+        self._apply_icon()
+        self._build_ui()
+        self._setup_shortcuts()
+
+    def _apply_icon(self) -> None:
+        icon_path = resource_path(ICON_FILE)
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+
+    def _setup_shortcuts(self) -> None:
+        toggle_shortcut = QShortcut(QKeySequence("F11"), self)
+        toggle_shortcut.activated.connect(self.toggle_fullscreen)
+
+        exit_shortcut = QShortcut(QKeySequence(Qt.Key_Escape), self)
+        exit_shortcut.activated.connect(self.exit_fullscreen)
+
+    def _build_ui(self) -> None:
+        central = QWidget()
+        self.setCentralWidget(central)
+
+        shell = QVBoxLayout(central)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        content = QWidget()
+        scroll.setWidget(content)
+
+        shell.addWidget(scroll)
+
+        body = QVBoxLayout(content)
+        body.setContentsMargins(24, 24, 24, 24)
+        body.setSpacing(20)
+
+        quick_section = SectionFrame("Быстрые действия", 4)
+        quick_buttons = [GlassCardButton(title, subtitle, callback) for title, subtitle, callback in QUICK_ACTIONS]
+        quick_section.add_buttons(quick_buttons)
+        body.addWidget(quick_section)
+
+        registry_section = SectionFrame("Артефакты реестра", 3)
+        registry_buttons = [PillButton(title, lambda checked=False, p=path, n=title: open_regedit_path(p, n)) for title, path in REG_PATHS]
+        registry_section.add_buttons(registry_buttons)
+        body.addWidget(registry_section)
+
+        logs_section = SectionFrame("Журналы Windows", 4)
+        log_buttons = [PillButton(title, lambda checked=False, p=path, n=title: open_event_log(p, n)) for title, path in LOG_FILES]
+        logs_section.add_buttons(log_buttons)
+        body.addWidget(logs_section)
+
+        tools_section = SectionFrame("Дополнительные инструменты", 3)
+        tool_buttons = [PillButton("👥 Альтернативные аккаунты", open_alt_accounts)]
+        tool_buttons.extend(PillButton(title, lambda checked=False, link=url: open_link(link)) for title, url in CHECK_LINKS)
+        tools_section.add_buttons(tool_buttons)
+        body.addWidget(tools_section)
+
+        body.addStretch(1)
+
+        status_wrap = QFrame()
+        status_wrap.setObjectName("StatusWrap")
+        status_layout = QHBoxLayout(status_wrap)
+        status_layout.setContentsMargins(24, 14, 24, 14)
+        status_layout.setSpacing(12)
+
+        self.status_label = QLabel("Готово")
+        self.status_label.setObjectName("StatusLabel")
+        help_label = QLabel("F11: полноэкранный режим, Esc: выйти из него")
+        help_label.setObjectName("HelpLabel")
+
+        status_layout.addWidget(self.status_label, 1)
+        status_layout.addWidget(help_label, 0, Qt.AlignRight)
+        shell.addWidget(status_wrap)
+
+    def set_status(self, text: str) -> None:
+        self.status_label.setText(text)
+
+    def toggle_fullscreen(self) -> None:
+        if self.isFullScreen():
+            self.showNormal()
+            self.resize(WINDOW_W, WINDOW_H)
+            self.set_status("Полноэкранный режим отключен")
         else:
-            inset = 0
+            self.showFullScreen()
+            self.set_status("Полноэкранный режим включен")
 
-        self.create_polygon(
-            rounded_points(inset, inset, width - inset, height - inset, max(4, self.radius - 1)),
-            smooth=True,
-            fill=self.bg_color,
-            outline="",
-            tags="panel",
-        )
-
-
-class ActionCard(tk.Canvas):
-    def __init__(self, parent, icon_text: str, title: str, subtitle: str, command: Callable[[], None]):
-        super().__init__(parent, bg=BG, height=96, highlightthickness=0, bd=0, cursor="hand2")
-        self.icon_text = icon_text
-        self.title = title
-        self.subtitle = subtitle
-        self.command = command
-        self.bind("<Configure>", self._redraw)
-        self.bind("<Button-1>", lambda _e: self.command())
-
-    def _redraw(self, _event=None) -> None:
-        self.delete("all")
-        width = max(110, self.winfo_width())
-        height = max(70, self.winfo_height())
-        inset = 1
-
-        self.create_polygon(
-            rounded_points(inset, inset, width - inset, height - inset, RADIUS),
-            smooth=True,
-            fill=CARD,
-            outline="",
-        )
-        self.create_text(34, height / 2, text=self.icon_text, font=("Segoe UI Emoji", 20), fill=FG, anchor="center")
-        self.create_text(68, 34, text=self.title, font=("Bahnschrift SemiBold", 10), fill=FG, anchor="w")
-        self.create_text(68, 62, text=self.subtitle, font=("Bahnschrift", 8), fill=SUB, anchor="w", width=width - 98)
+    def exit_fullscreen(self) -> None:
+        if self.isFullScreen():
+            self.showNormal()
+            self.resize(WINDOW_W, WINDOW_H)
+            self.set_status("Полноэкранный режим отключен")
 
 
-class MiniButton(tk.Canvas):
-    def __init__(self, parent, text: str, command: Callable[[], None]):
-        super().__init__(parent, bg=PANEL, height=38, highlightthickness=0, bd=0, cursor="hand2")
-        self.text_value = text
-        self.command = command
-        self.bind("<Configure>", self._redraw)
-        self.bind("<Button-1>", lambda _e: self.command())
+def build_styles() -> str:
+    return """
+    QMainWindow, QWidget {
+        background: #090506;
+        color: #f7ecef;
+        font-family: "Segoe UI";
+        font-size: 10pt;
+    }
+    QLabel {
+        background: transparent;
+    }
+    QScrollArea {
+        border: none;
+        background: transparent;
+    }
+    QScrollBar:vertical {
+        background: #12090c;
+        width: 14px;
+        margin: 8px 2px 8px 2px;
+        border-radius: 7px;
+    }
+    QScrollBar::handle:vertical {
+        background: #5a2b35;
+        min-height: 48px;
+        border-radius: 7px;
+    }
+    QScrollBar::handle:vertical:hover {
+        background: #7a3947;
+    }
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+        height: 0px;
+    }
+    #SectionFrame, #StatusWrap {
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #12090c, stop:0.6 #0d0608, stop:1 #080405);
+        border: 1px solid #4a232c;
+        border-radius: 24px;
+    }
+    #SectionTitle {
+        font-family: "Segoe UI Semibold";
+        font-size: 15pt;
+        color: #fff2f4;
+        padding-bottom: 2px;
+    }
+    QPushButton[role="card"] {
+        text-align: left;
+        border: 1px solid #6a2e3b;
+        border-radius: 22px;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #261014, stop:0.55 #180b0e, stop:1 #100608);
+    }
+    QPushButton[role="card"]:hover {
+        border: 1px solid #b45567;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #35161c, stop:0.55 #221014, stop:1 #16090c);
+    }
+    QPushButton[role="card"]:pressed {
+        background: #110709;
+    }
+    #CardTitle {
+        font-family: "Segoe UI Semibold";
+        font-size: 14pt;
+        color: #fff5f6;
+    }
+    #CardSubtitle {
+        color: #d8aab3;
+        font-size: 10pt;
+    }
+    PillButton, QPushButton {
+        font-family: "Segoe UI Semibold";
+    }
+    QPushButton[accent="false"], QPushButton[accent="0"], QPushButton[accent="true"], QPushButton[accent="1"] {
+        border: 1px solid #6a2e3b;
+        border-radius: 18px;
+        padding: 14px 18px;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #2a1116, stop:1 #190a0d);
+        color: #fff3f5;
+    }
+    QPushButton[accent="false"]:hover, QPushButton[accent="0"]:hover, QPushButton[accent="true"]:hover, QPushButton[accent="1"]:hover {
+        border-color: #c16173;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #3a171e, stop:1 #241014);
+    }
+    QPushButton:pressed {
+        padding-top: 15px;
+    }
+    #StatusLabel {
+        color: #fff0f2;
+        font-family: "Segoe UI Semibold";
+        font-size: 10.5pt;
+    }
+    #HelpLabel {
+        color: #b88f97;
+        font-size: 9.5pt;
+    }
+    QMessageBox {
+        background: #100708;
+    }
+    """
 
-    def _redraw(self, _event=None) -> None:
-        self.delete("all")
-        width = max(70, self.winfo_width())
-        height = max(30, self.winfo_height())
-        inset = 1
 
-        self.create_polygon(
-            rounded_points(inset, inset, width - inset, height - inset, 12),
-            smooth=True,
-            fill=BUTTON,
-            outline="",
-        )
-        self.create_text(
-            width / 2,
-            height / 2,
-            text=self.text_value,
-            font=("Bahnschrift SemiBold", 9),
-            fill=FG,
-            anchor="center",
-            width=width - 20,
-        )
-
-
-class SideSection(tk.Frame):
-    def __init__(self, parent, title: str):
-        super().__init__(parent, bg=BG)
-        self.panel = RoundedPanel(self, bg_color=PANEL, border_color=PANEL_BORDER, radius=RADIUS)
-        self.panel.place(relx=0, rely=0, relwidth=1, relheight=1)
-        self.body = tk.Frame(self, bg=PANEL)
-        self.body.pack(fill="both", expand=True, padx=12, pady=10)
-        self.body.columnconfigure(0, weight=1)
-        self.title_label = tk.Label(
-            self.body,
-            text=title,
-            bg=PANEL,
-            fg=FG,
-            font=("Bahnschrift SemiBold", 10),
-            anchor="w",
-        )
-        self.title_label.pack(anchor="w", pady=(0, 8))
-
-
-def build_quick_actions() -> list[tuple[str, str, str, Callable[[], None]]]:
-    return [
-        ("🕘", "Recent", "Недавние файлы и ярлыки", lambda: open_folder(os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Recent"))),
-        ("🧪", "Temp", "Временные файлы", lambda: open_folder(os.environ.get("TEMP", ""))),
-        ("⚡", "Prefetch", "Системный кэш запуска", lambda: open_folder(r"C:\Windows\Prefetch")),
-        ("🧩", "Regedit", "Редактор реестра Windows", lambda: open_program(["regedit.exe"], "Не удалось открыть regedit.")),
-        ("🛡", "Защита от вирусов", "Журнал защиты и системный антивирус", lambda: open_first_available("windowsdefender://threat", "windowsdefender:", "ms-settings:windowsdefender")),
-        ("🔒", "Изоляция ядра", "Параметры безопасности устройства", lambda: open_first_available("windowsdefender://coreisolation", "ms-settings:windowsdefender", "windowsdefender:")),
-        ("📶", "Использование данных", "Сеть и интернет", lambda: open_first_available("ms-settings:datausage", "ms-settings:network")),
-        ("🗑", "Корзина", "Недавно удаленные файлы", lambda: open_program(["explorer.exe", "shell:RecycleBinFolder"], "Не удалось открыть корзину.")),
-        ("🖥", "Дата Windows", "Дата установки системы", show_windows_install_date),
-    ]
-
-
-QUICK_ACTIONS = build_quick_actions()
-
-
-def create_app() -> tk.Tk:
-    global root, status_var
+def main() -> int:
+    global main_window
 
     set_app_id()
+    ensure_admin()
+    app = QApplication(sys.argv)
+    app.setStyleSheet(build_styles())
 
-    root = tk.Tk()
-    status_var = tk.StringVar(value="Готово")
+    font = QFont("Segoe UI", 10)
+    app.setFont(font)
 
-    root.title(APP_TITLE)
-    root.configure(bg=BG)
-    root.resizable(False, False)
-
-    x = (root.winfo_screenwidth() - WINDOW_W) // 2
-    y = (root.winfo_screenheight() - WINDOW_H) // 2
-    root.geometry(f"{WINDOW_W}x{WINDOW_H}+{x}+{y}")
-    root.minsize(WINDOW_W, WINDOW_H)
-    apply_icon(root)
-
-    outer = tk.Frame(root, bg=BG)
-    outer.pack(fill="both", expand=True, padx=16, pady=16)
-
-    content = tk.Frame(outer, bg=BG)
-    content.pack(fill="both", expand=True)
-    content.columnconfigure(0, weight=5, uniform="layout")
-    content.columnconfigure(1, weight=3, uniform="layout")
-
-    left = tk.Frame(content, bg=BG)
-    left.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-    left.columnconfigure(0, weight=1)
-    left.columnconfigure(1, weight=1)
-
-    rows_needed = (len(QUICK_ACTIONS) + 1) // 2
-    for row_index in range(rows_needed):
-        left.rowconfigure(row_index, weight=1)
-
-    for index, (icon_text, title, subtitle, command) in enumerate(QUICK_ACTIONS):
-        row = index // 2
-        column = index % 2
-        card = ActionCard(left, icon_text, title, subtitle, command)
-        card.grid(row=row, column=column, sticky="nsew", padx=6, pady=6)
-
-    right = tk.Frame(content, bg=BG)
-    right.grid(row=0, column=1, sticky="nsew")
-    right.columnconfigure(0, weight=1)
-    right.rowconfigure(0, weight=0)
-    right.rowconfigure(1, weight=0)
-
-    registry_section = SideSection(right, "Быстрые пути реестра")
-    registry_section.grid(row=0, column=0, sticky="ew", pady=(6, 10))
-
-    for row_index, (button_number, short_name, reg_path) in enumerate(REG_PATHS):
-        button = MiniButton(
-            registry_section.body,
-            f"Путь {button_number}",
-            lambda path=reg_path, name=short_name: open_regedit_path(path, name),
-        )
-        button.pack(fill="x", pady=(0, 8 if row_index < len(REG_PATHS) - 1 else 0))
-
-    links_section = SideSection(right, "Дальнейшая проверка")
-    links_section.grid(row=1, column=0, sticky="ew")
-
-    alt_button = MiniButton(links_section.body, "Альтернативные аккаунты", open_alt_accounts)
-    alt_button.pack(fill="x", pady=(0, 8))
-
-    for row_index, (title, url) in enumerate(CHECK_LINKS):
-        button = MiniButton(links_section.body, title, lambda link=url: open_link(link))
-        button.pack(fill="x", pady=(0, 8 if row_index < len(CHECK_LINKS) - 1 else 0))
-
-    status_bar = tk.Label(
-        outer,
-        textvariable=status_var,
-        bg=BG,
-        fg=STATUS,
-        font=("Bahnschrift", 8),
-        anchor="w",
-    )
-    status_bar.pack(fill="x", pady=(8, 0))
-
-    return root
+    main_window = MainWindow()
+    main_window.show()
+    return app.exec()
 
 
 if __name__ == "__main__":
-    app = create_app()
-    app.mainloop()
+    sys.exit(main())
